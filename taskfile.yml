@@ -1,0 +1,46 @@
+version: '3'
+tasks:
+  build:
+    desc: Build the Chronos CLI
+    cmds:
+      - mkdir -p dist
+      - go build -o dist/chronos main.go
+    sources:
+      - '**/*.go'
+    generates:
+      - dist/chronos
+  test:
+    desc: Run all tests (including CLI integration)
+    cmds:
+      - go test ./...
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run || true
+  format:
+    desc: Run gofmt on all Go files
+    cmds:
+      - gofmt -w .
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f dist/chronos chronos chronos-linux-amd64.tar.gz
+  release:
+    desc: Build a release binary and archive
+    cmds:
+      - mkdir -p dist
+      - go build -ldflags "-s -w" -o dist/chronos main.go
+      - tar -czvf dist/chronos-linux-amd64.tar.gz dist/chronos README.md LICENSE
+    sources:
+      - '**/*.go'
+    generates:
+      - dist/chronos-linux-amd64.tar.gz
+  dev-symlink:
+    desc: Symlink dist/chronos into the project root for dev CLI use
+    cmds:
+      - ln -sf $(pwd)/dist/chronos $(pwd)/chronos
+  install:
+    desc: Install the CLI to ~/bin (creates bin if needed)
+    cmds:
+      - mkdir -p ~/bin
+      - cp dist/chronos ~/bin/chronos

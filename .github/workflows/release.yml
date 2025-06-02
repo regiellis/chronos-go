@@ -1,0 +1,34 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          go build -o dist/chronos main.go
+
+      - name: Archive binary
+        run: |
+          tar -czvf dist/chronos-linux-amd64.tar.gz dist/chronos README.md LICENSE
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/chronos-linux-amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
