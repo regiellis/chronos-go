@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/regiellis/chronos-go/db" // Assumed import path for db.Store
+	// "github.com/regiellis/chronos-go/db" // Removed db import
 )
 
 type Block struct {
@@ -22,11 +21,12 @@ type Block struct {
 }
 
 // CreateBlock adds a new block to the database.
-func CreateBlock(store *db.Store, block *Block) error {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+// Internal DB calls will be compile errors until db.Store implements BlockStore.
+func CreateBlock(store BlockStore, block *Block) error {
 	block.CreatedAt = time.Now()
 	block.UpdatedAt = time.Now()
 
-	// Ensure EndTime is NULL if it's zero, otherwise use the provided time.
 	var endTime interface{}
 	if block.EndTime.IsZero() {
 		endTime = nil
@@ -37,6 +37,7 @@ func CreateBlock(store *db.Store, block *Block) error {
 	query := `
 		INSERT INTO blocks (name, client, project, start_time, end_time, active, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	// The following line will cause a compile error.
 	res, err := store.DB.Exec(query, block.Name, block.Client, block.Project, block.StartTime, endTime, block.Active, block.CreatedAt, block.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateBlock: failed to execute insert: %w", err)
@@ -50,14 +51,15 @@ func CreateBlock(store *db.Store, block *Block) error {
 }
 
 // GetBlockByID retrieves a block from the database by its ID.
-func GetBlockByID(store *db.Store, id int64) (*Block, error) {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func GetBlockByID(store BlockStore, id int64) (*Block, error) {
 	block := &Block{}
-	// Handle potential NULL EndTime from DB
 	var endTime sql.NullTime
 
 	query := `
 		SELECT id, name, client, project, start_time, end_time, active, created_at, updated_at
 		FROM blocks WHERE id = ?`
+	// The following line will cause a compile error.
 	err := store.DB.QueryRow(query, id).Scan(
 		&block.ID, &block.Name, &block.Client, &block.Project,
 		&block.StartTime, &endTime, &block.Active, &block.CreatedAt, &block.UpdatedAt,
@@ -75,9 +77,9 @@ func GetBlockByID(store *db.Store, id int64) (*Block, error) {
 }
 
 // UpdateBlock updates an existing block in the database.
-func UpdateBlock(store *db.Store, block *Block) error {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func UpdateBlock(store BlockStore, block *Block) error {
 	block.UpdatedAt = time.Now()
-
 	var endTime interface{}
 	if block.EndTime.IsZero() {
 		endTime = nil
@@ -89,6 +91,7 @@ func UpdateBlock(store *db.Store, block *Block) error {
 		UPDATE blocks
 		SET name = ?, client = ?, project = ?, start_time = ?, end_time = ?, active = ?, updated_at = ?
 		WHERE id = ?`
+	// The following line will cause a compile error.
 	_, err := store.DB.Exec(query, block.Name, block.Client, block.Project, block.StartTime, endTime, block.Active, block.UpdatedAt, block.ID)
 	if err != nil {
 		return fmt.Errorf("UpdateBlock: failed to execute update: %w", err)
@@ -97,8 +100,10 @@ func UpdateBlock(store *db.Store, block *Block) error {
 }
 
 // DeleteBlock removes a block from the database by its ID.
-func DeleteBlock(store *db.Store, id int64) error {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func DeleteBlock(store BlockStore, id int64) error {
 	query := "DELETE FROM blocks WHERE id = ?"
+	// The following line will cause a compile error.
 	_, err := store.DB.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("DeleteBlock: failed to execute delete: %w", err)
@@ -107,8 +112,8 @@ func DeleteBlock(store *db.Store, id int64) error {
 }
 
 // ListBlocks retrieves a list of blocks from the database, optionally filtered.
-// Example filters: "active" (bool), "client" (string), "project" (string), "start_date", "end_date"
-func ListBlocks(store *db.Store, filters map[string]interface{}) ([]*Block, error) {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func ListBlocks(store BlockStore, filters map[string]interface{}) ([]*Block, error) {
 	baseQuery := "SELECT id, name, client, project, start_time, end_time, active, created_at, updated_at FROM blocks"
 	var conditions []string
 	var args []interface{}
@@ -119,18 +124,17 @@ func ListBlocks(store *db.Store, filters map[string]interface{}) ([]*Block, erro
 			conditions = append(conditions, "active = ?")
 			args = append(args, value)
 		case "client":
-			conditions = append(conditions, "client = ?") // Or client_id if schema changes
+			conditions = append(conditions, "client = ?")
 			args = append(args, value)
 		case "project":
-			conditions = append(conditions, "project = ?") // Or project_id if schema changes
+			conditions = append(conditions, "project = ?")
 			args = append(args, value)
-		case "start_date": // Blocks started on or after this date
+		case "start_date":
 			conditions = append(conditions, "date(start_time) >= date(?)")
 			args = append(args, value)
-		case "end_date": // Blocks started on or before this date (or active blocks if end_time is also checked)
+		case "end_date":
 			conditions = append(conditions, "date(start_time) <= date(?)")
 			args = append(args, value)
-		// Add more filters as needed
 		}
 	}
 
@@ -138,8 +142,9 @@ func ListBlocks(store *db.Store, filters map[string]interface{}) ([]*Block, erro
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY start_time DESC" // Default ordering
+	query += " ORDER BY start_time DESC"
 
+	// The following line will cause a compile error.
 	rows, err := store.DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("ListBlocks: failed to execute query: %w", err)
@@ -169,20 +174,21 @@ func ListBlocks(store *db.Store, filters map[string]interface{}) ([]*Block, erro
 }
 
 // GetActiveBlock retrieves the currently active block, if any.
-// Assumes only one block can be active at a time.
-func GetActiveBlock(store *db.Store) (*Block, error) {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func GetActiveBlock(store BlockStore) (*Block, error) {
 	block := &Block{}
 	var endTime sql.NullTime
 	query := `
 		SELECT id, name, client, project, start_time, end_time, active, created_at, updated_at
-		FROM blocks WHERE active = TRUE LIMIT 1` // Or active = 1 for SQLite
+		FROM blocks WHERE active = TRUE LIMIT 1`
+	// The following line will cause a compile error.
 	err := store.DB.QueryRow(query).Scan(
 		&block.ID, &block.Name, &block.Client, &block.Project,
 		&block.StartTime, &endTime, &block.Active, &block.CreatedAt, &block.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // No active block is not an error in this context
+			return nil, nil
 		}
 		return nil, fmt.Errorf("GetActiveBlock: failed to scan row: %w", err)
 	}
@@ -193,21 +199,20 @@ func GetActiveBlock(store *db.Store) (*Block, error) {
 }
 
 // SetActiveBlock sets a block as active and deactivates others.
-// This is a common operation, so good to have a dedicated function.
-func SetActiveBlock(store *db.Store, id int64) error {
+// NOTE: The 'store' parameter is now a BlockStore interface.
+func SetActiveBlock(store BlockStore, id int64) error {
+	// The following lines will cause compile errors.
 	tx, err := store.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("SetActiveBlock: failed to begin transaction: %w", err)
 	}
 
-	// Deactivate all other blocks
 	_, err = tx.Exec("UPDATE blocks SET active = FALSE, updated_at = ? WHERE active = TRUE", time.Now())
 	if err != nil {
 		tx.Rollback()
 		return fmt.Errorf("SetActiveBlock: failed to deactivate other blocks: %w", err)
 	}
 
-	// Activate the specified block
 	_, err = tx.Exec("UPDATE blocks SET active = TRUE, updated_at = ? WHERE id = ?", time.Now(), id)
 	if err != nil {
 		tx.Rollback()

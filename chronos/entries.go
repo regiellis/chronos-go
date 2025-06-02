@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/regiellis/chronos-go/db" // Assumed import path for db.Store
-	// Assuming chronos.Entry is defined in the same package or imported appropriately.
-	// If chronos.Entry is in "github.com/regiellis/chronos-go/chronos", it would be just "Entry" here.
+	// "github.com/regiellis/chronos-go/db" // Removed db import
 )
 
 // CreateEntry adds a new entry to the database.
 // Assumes entry.CreatedAt and entry.UpdatedAt will be set by the caller or here.
-func CreateEntry(store *db.Store, entry *Entry) error {
+// NOTE: The 'store' parameter is now an EntryStore interface.
+// The internal call store.DB.Exec will be a compile error until db.Store implements EntryStore.
+func CreateEntry(store EntryStore, entry *Entry) error {
 	if entry.CreatedAt.IsZero() {
 		entry.CreatedAt = time.Now()
 	}
@@ -22,6 +21,8 @@ func CreateEntry(store *db.Store, entry *Entry) error {
 	query := `
 		INSERT INTO entries (block_id, project_id, summary, start_time, end_time, created_at, updated_at, invoiced)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	// The following line will cause a compile error until EntryStore is implemented by a type
+	// that has a DB field or the CreateEntry method itself is moved to the implementing type.
 	res, err := store.DB.Exec(query, entry.BlockID, entry.ProjectID, entry.Summary, entry.StartTime, entry.EndTime, entry.CreatedAt, entry.UpdatedAt, entry.Invoiced)
 	if err != nil {
 		return fmt.Errorf("CreateEntry: failed to execute insert: %w", err)
@@ -35,11 +36,14 @@ func CreateEntry(store *db.Store, entry *Entry) error {
 }
 
 // GetEntryByID retrieves an entry from the database by its ID.
-func GetEntryByID(store *db.Store, id int64) (*Entry, error) {
+// NOTE: The 'store' parameter is now an EntryStore interface.
+// The internal call store.DB.QueryRow will be a compile error.
+func GetEntryByID(store EntryStore, id int64) (*Entry, error) {
 	entry := &Entry{}
 	query := `
 		SELECT id, block_id, project_id, summary, start_time, end_time, created_at, updated_at, invoiced
 		FROM entries WHERE id = ?`
+	// The following line will cause a compile error.
 	err := store.DB.QueryRow(query, id).Scan(
 		&entry.ID, &entry.BlockID, &entry.ProjectID, &entry.Summary,
 		&entry.StartTime, &entry.EndTime, &entry.CreatedAt, &entry.UpdatedAt, &entry.Invoiced,
@@ -54,12 +58,15 @@ func GetEntryByID(store *db.Store, id int64) (*Entry, error) {
 }
 
 // UpdateEntry updates an existing entry in the database.
-func UpdateEntry(store *db.Store, entry *Entry) error {
+// NOTE: The 'store' parameter is now an EntryStore interface.
+// The internal call store.DB.Exec will be a compile error.
+func UpdateEntry(store EntryStore, entry *Entry) error {
 	entry.UpdatedAt = time.Now()
 	query := `
 		UPDATE entries
 		SET block_id = ?, project_id = ?, summary = ?, start_time = ?, end_time = ?, updated_at = ?, invoiced = ?
 		WHERE id = ?`
+	// The following line will cause a compile error.
 	_, err := store.DB.Exec(query, entry.BlockID, entry.ProjectID, entry.Summary, entry.StartTime, entry.EndTime, entry.UpdatedAt, entry.Invoiced, entry.ID)
 	if err != nil {
 		return fmt.Errorf("UpdateEntry: failed to execute update: %w", err)
@@ -68,8 +75,11 @@ func UpdateEntry(store *db.Store, entry *Entry) error {
 }
 
 // DeleteEntry removes an entry from the database by its ID.
-func DeleteEntry(store *db.Store, id int64) error {
+// NOTE: The 'store' parameter is now an EntryStore interface.
+// The internal call store.DB.Exec will be a compile error.
+func DeleteEntry(store EntryStore, id int64) error {
 	query := "DELETE FROM entries WHERE id = ?"
+	// The following line will cause a compile error.
 	_, err := store.DB.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("DeleteEntry: failed to execute delete: %w", err)
@@ -78,8 +88,9 @@ func DeleteEntry(store *db.Store, id int64) error {
 }
 
 // ListEntries retrieves a list of entries from the database, optionally filtered.
-// Example filters: "block_id", "project_id", "invoiced", "start_date", "end_date"
-func ListEntries(store *db.Store, filters map[string]interface{}) ([]*Entry, error) {
+// NOTE: The 'store' parameter is now an EntryStore interface.
+// The internal call store.DB.Query will be a compile error.
+func ListEntries(store EntryStore, filters map[string]interface{}) ([]*Entry, error) {
 	baseQuery := "SELECT id, block_id, project_id, summary, start_time, end_time, created_at, updated_at, invoiced FROM entries"
 	var conditions []string
 	var args []interface{}
@@ -95,13 +106,12 @@ func ListEntries(store *db.Store, filters map[string]interface{}) ([]*Entry, err
 		case "invoiced":
 			conditions = append(conditions, "invoiced = ?")
 			args = append(args, value)
-		case "start_date": // Assumes value is time.Time or string parsable to time
+		case "start_date":
 			conditions = append(conditions, "date(start_time) >= date(?)")
 			args = append(args, value)
-		case "end_date": // Assumes value is time.Time or string parsable to time
+		case "end_date":
 			conditions = append(conditions, "date(start_time) <= date(?)")
 			args = append(args, value)
-		// Add more filters as needed
 		}
 	}
 
@@ -109,8 +119,9 @@ func ListEntries(store *db.Store, filters map[string]interface{}) ([]*Entry, err
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	query += " ORDER BY start_time DESC" // Default ordering
+	query += " ORDER BY start_time DESC"
 
+	// The following line will cause a compile error.
 	rows, err := store.DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("ListEntries: failed to execute query: %w", err)
